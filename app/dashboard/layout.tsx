@@ -60,75 +60,87 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="flex h-screen bg-white">
-      {/* Sidebar */}
-      <div className="w-64 sidebar flex flex-col">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="6" />
-                <path d="M12 2v4m0 12v4M22 12h-4M4 12H0" stroke="white" strokeWidth="2" />
+    <div className="flex h-screen bg-[#FAF8F4]">
+      {/* Sidebar - Fixed 300px width */}
+      <div className="w-[300px] bg-white border-r border-[#E5E7EB] flex flex-col shadow-sm">
+        {/* Logo and branding */}
+        <div className="p-6 border-b border-[#E5E7EB]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-amber-100 to-amber-50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="5" strokeWidth="2" />
+                <path d="M12 1v6m0 6v6m11-11h-6M1 12h6" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </div>
             <div>
-              <h1 className="font-bold text-black">Solar Ops</h1>
-              <p className="text-xs text-gray-600">Intelligence Platform</p>
+              <h2 className="font-bold text-[#111111] text-sm">Solar Operations</h2>
+              <p className="text-xs text-[#6B7280]">Intelligence</p>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 px-4 py-6 overflow-y-auto">
-          <div className="mb-8">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase mb-3">Navigation</h3>
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-6 overflow-y-auto space-y-1">
+          <div>
+            <h3 className="text-xs font-600 text-[#6B7280] uppercase mb-4 px-3">Navigation</h3>
             <Link
               href="/dashboard"
-              className="block px-3 py-2 rounded text-gray-700 hover:bg-yellow-50 transition"
+              className="block px-4 py-2.5 rounded-lg text-[#111111] hover:bg-[#F3F4F6] font-500 transition-colors duration-150"
             >
               Overview
             </Link>
             <Link
               href="/dashboard/plants"
-              className="block px-3 py-2 rounded text-gray-700 hover:bg-yellow-50 transition"
+              className="block px-4 py-2.5 rounded-lg text-[#111111] hover:bg-[#F3F4F6] font-500 transition-colors duration-150"
             >
               Plants
             </Link>
             <Link
               href="/dashboard/comparison"
-              className="block px-3 py-2 rounded text-gray-700 hover:bg-yellow-50 transition"
+              className="block px-4 py-2.5 rounded-lg text-[#111111] hover:bg-[#F3F4F6] font-500 transition-colors duration-150"
             >
               Plant Comparison
             </Link>
             <Link
               href="/dashboard/chat"
-              className="block px-3 py-2 rounded text-gray-700 hover:bg-yellow-50 transition"
+              className="block px-4 py-2.5 rounded-lg text-[#111111] hover:bg-[#F3F4F6] font-500 transition-colors duration-150"
             >
               AI Assistant
             </Link>
           </div>
 
-          <div className="border-t border-gray-200 pt-4">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase mb-3">Account</h3>
+          <div className="border-t border-[#E5E7EB] pt-4 mt-4">
+            <h3 className="text-xs font-600 text-[#6B7280] uppercase mb-4 px-3">Account</h3>
             <button
               onClick={handleSignOut}
-              className="w-full text-left px-3 py-2 rounded text-gray-700 hover:bg-red-50 transition text-sm"
+              className="w-full text-left px-4 py-2.5 rounded-lg text-[#111111] hover:bg-red-50 transition-colors duration-150 font-500 text-sm"
             >
               Sign Out
             </button>
           </div>
         </nav>
 
-        <div className="border-t border-gray-200 p-4">
-          <div className="text-xs text-gray-600 truncate">
-            <p className="font-medium">Logged in as:</p>
-            <p className="truncate text-gray-500">{userEmail}</p>
+        {/* User info footer */}
+        <div className="border-t border-[#E5E7EB] p-4 bg-white">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-gradient-to-br from-amber-200 to-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <span className="text-sm font-bold text-amber-700">
+                {userEmail?.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-600 text-[#111111]">Logged in</p>
+              <p className="text-xs text-[#6B7280] truncate">{userEmail}</p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="flex-1 overflow-auto bg-gray-50">
-        {children}
+      {/* Main content area */}
+      <div className="flex-1 overflow-auto">
+        <div className="min-h-screen">
+          {children}
+        </div>
       </div>
     </div>
   );

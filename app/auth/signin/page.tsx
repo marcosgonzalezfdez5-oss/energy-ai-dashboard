@@ -39,25 +39,37 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-lg border border-gray-200 p-8">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-black mb-2">
-              Solar Operations <span className="text-primary">Intelligence</span>
-            </h1>
-            <p className="text-gray-600">Sign in to access your dashboard</p>
+    <div className="min-h-screen bg-gradient-to-br from-[#FAF8F4] to-[#FEF5EB] flex items-center justify-center px-4 py-8">
+      <div className="w-full max-w-sm">
+        {/* Header with logo */}
+        <div className="text-center mb-12">
+          <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <svg
+              className="w-8 h-8 text-amber-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="12" cy="12" r="5" strokeWidth="2" />
+              <path d="M12 1v6m0 6v6m11-11h-6M1 12h6" strokeWidth="2" strokeLinecap="round" />
+            </svg>
           </div>
+          <h1 className="text-2xl font-bold text-[#111111] mb-1">Sign in</h1>
+          <p className="text-[#6B7280]">Access your solar operations dashboard</p>
+        </div>
 
+        {/* Main card */}
+        <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-500">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSignIn} className="space-y-4">
+          <form onSubmit={handleSignIn} className="space-y-5">
+            {/* Email field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="email" className="block text-sm font-600 text-[#111111] mb-2">
                 Email address
               </label>
               <input
@@ -65,15 +77,16 @@ export default function SignInPage() {
                 id="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="operator.company_1@example.com"
+                placeholder="you@example.com"
                 required
                 disabled={isLoading}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100"
+                className="w-full px-4 py-3 border border-[#E5E7EB] rounded-xl bg-white text-[#111111] placeholder-[#9CA3AF] focus:outline-none focus:border-[#F59E0B] focus:ring-2 focus:ring-amber-100 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
 
+            {/* Password field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="password" className="block text-sm font-600 text-[#111111] mb-2">
                 Password
               </label>
               <input
@@ -84,33 +97,36 @@ export default function SignInPage() {
                 placeholder="••••••••"
                 required
                 disabled={isLoading}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100"
+                className="w-full px-4 py-3 border border-[#E5E7EB] rounded-xl bg-white text-[#111111] placeholder-[#9CA3AF] focus:outline-none focus:border-[#F59E0B] focus:ring-2 focus:ring-amber-100 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
 
+            {/* Submit button */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-primary text-white font-semibold py-2 rounded-lg hover:bg-opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-[#F59E0B] hover:bg-[#EA9200] text-white font-semibold py-3.5 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {isLoading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
 
+          {/* Signup link */}
           <div className="mt-6 text-center">
-            <p className="text-gray-600">
+            <p className="text-[#6B7280]">
               Don&apos;t have an account?{' '}
-              <Link href="/auth/signup" className="text-primary hover:underline font-medium">
-                Sign up
+              <Link href="/auth/signup" className="text-[#F59E0B] hover:text-[#EA9200] font-semibold transition-colors">
+                Create one
               </Link>
             </p>
           </div>
+        </div>
 
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
-            <p className="font-medium mb-2">Demo credentials:</p>
-            <p>Email: operator.company_1@example.com</p>
-            <p>Password: (contact admin)</p>
-          </div>
+        {/* Demo info card */}
+        <div className="bg-white border-2 border-[#E5E7EB] rounded-xl p-4 text-sm">
+          <p className="font-600 text-[#111111] mb-2">Demo credentials:</p>
+          <p className="text-[#6B7280] text-xs mb-1">Email: <span className="font-mono text-[#111111]">operator.company_1@example.com</span></p>
+          <p className="text-[#6B7280] text-xs">Password: <span className="font-mono text-[#111111]">password123</span></p>
         </div>
       </div>
     </div>
