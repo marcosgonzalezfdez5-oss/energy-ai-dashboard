@@ -2,13 +2,14 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getProfileFromUserId, requireAdmin } from "../../lib/auth-server";
 import { getUserScopedSupabase } from "../../lib/supabase-server";
+import { toExclusiveEnd } from "../../lib/date-range";
 
 export default defineTool({
   description: "Fetch electricity market prices (EUR/MWh) for a zone and date range. Admin access only.",
   inputSchema: z.object({
     zone: z.string().describe("Market zone identifier (e.g. 'ES', 'FR')."),
-    start: z.string().describe("Start datetime in ISO 8601 format."),
-    end: z.string().describe("End datetime in ISO 8601 format."),
+    start: z.string().describe("Start datetime in ISO 8601 format, inclusive."),
+    end: z.string().describe("End datetime in ISO 8601 format, inclusive (e.g. for the month of March use start=2024-03-01, end=2024-03-31)."),
     daily: z.boolean().optional().describe("Return daily averages instead of hourly prices."),
   }),
   async execute({ zone, start, end, daily }, ctx) {
@@ -25,7 +26,7 @@ export default defineTool({
         p_company_id: profile.company_id,
         p_zone: zone,
         p_start: start,
-        p_end: end,
+        p_end: toExclusiveEnd(end),
       });
       if (error) throw error;
       return data ?? [];

@@ -2,14 +2,15 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getProfileFromUserId } from "../../lib/auth-server";
 import { getUserScopedSupabase } from "../../lib/supabase-server";
+import { toExclusiveEnd } from "../../lib/date-range";
 
 export default defineTool({
   description: "Fetch daily energy totals (kWh) for a plant or a specific datasource. Provide either plant_id or datasource_id.",
   inputSchema: z.object({
     plant_id: z.string().optional().describe("Plant UUID — aggregates all datasources for the plant."),
     datasource_id: z.string().optional().describe("Datasource UUID — single sensor/meter totals."),
-    start: z.string().describe("Start date in YYYY-MM-DD format."),
-    end: z.string().describe("End date in YYYY-MM-DD format."),
+    start: z.string().describe("Start date in YYYY-MM-DD format, inclusive."),
+    end: z.string().describe("End date in YYYY-MM-DD format, inclusive (e.g. for the month of March use start=2024-03-01, end=2024-03-31)."),
   }),
   async execute({ plant_id, datasource_id, start, end }, ctx) {
     if (!plant_id && !datasource_id) throw new Error("Provide plant_id or datasource_id.");
@@ -19,6 +20,7 @@ export default defineTool({
 
     const profile = await getProfileFromUserId(userId);
     const supabase = getUserScopedSupabase(userId);
+    const exclusiveEnd = toExclusiveEnd(end);
 
     if (datasource_id) {
       // Single datasource — aggregate hourly readings by calendar date.
@@ -26,7 +28,7 @@ export default defineTool({
         p_datasource_id: datasource_id,
         p_company_id: profile.company_id,
         p_start: start,
-        p_end: end,
+        p_end: exclusiveEnd,
       });
       if (error) throw error;
       return data ?? [];
@@ -37,7 +39,7 @@ export default defineTool({
       p_plant_id: plant_id,
       p_company_id: profile.company_id,
       p_start: start,
-      p_end: end,
+      p_end: exclusiveEnd,
     });
     if (error) throw error;
     return data ?? [];

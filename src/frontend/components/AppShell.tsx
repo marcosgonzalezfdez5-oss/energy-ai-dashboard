@@ -6,7 +6,6 @@ import { supabase } from "@/lib/supabase";
 import { getMe, getPlants, UserProfile, Plant } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
 import PlantSidebar from "@/components/PlantSidebar";
-import { clearStoredThreads } from "@/components/ChatPage";
 
 type ShellProps = {
   token: string;
@@ -80,7 +79,6 @@ export default function AppShell({ children }: Props) {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
-    clearStoredThreads();
     router.replace("/");
   }
 

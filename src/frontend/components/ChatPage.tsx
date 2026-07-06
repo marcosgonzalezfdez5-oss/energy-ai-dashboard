@@ -6,42 +6,21 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { useEveAgent } from "eve/react";
-import type { EveDynamicToolPart, EveMessage, SessionState } from "eve/client";
+import type { EveDynamicToolPart, EveMessage, HandleMessageStreamEvent, SessionState } from "eve/client";
 import { supabase } from "@/lib/supabase";
-
-// ---------------------------------------------------------------------------
-// Thread persistence (localStorage)
-// ---------------------------------------------------------------------------
-
-const THREADS_KEY = "invertix_threads";
-
-interface StoredThread {
-  id: string;
-  title: string;
-  eveSession: SessionState | null;
-  created_at: string;
-}
-
-function loadThreads(): StoredThread[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(THREADS_KEY) ?? "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveThreads(threads: StoredThread[]) {
-  localStorage.setItem(THREADS_KEY, JSON.stringify(threads));
-}
-
-/** Clears locally-persisted chat threads (titles, history, Eve session cursors).
- *  Call on sign-out so the next login on this browser doesn't see the
- *  previous user's conversations. */
-export function clearStoredThreads() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(THREADS_KEY);
-}
+import { createEveClient } from "@/lib/eve-client";
+import {
+  type ChatThread,
+  appendEvent,
+  checkpointThread,
+  createThread,
+  deleteThread,
+  fetchThreadEvents,
+  isTerminalEvent,
+  listThreads,
+  renameThread,
+  threadSessionState,
+} from "@/lib/chat-history";
 
 // ---------------------------------------------------------------------------
 // Markdown renderer
@@ -231,24 +210,169 @@ function MessageBubble({ msg }: { msg: EveMessage }) {
 }
 
 // ---------------------------------------------------------------------------
-// Agent chat pane — remounts when activeThreadId changes via key prop
+// Agent chat pane — remounts when activeThreadId changes via key prop.
+//
+// A thread with an existing Eve session is first "caught up": mirrored
+// history is loaded from Supabase, then the Eve session's own stream is
+// replayed from the last known cursor. This recovers any turn that was
+// still running when the tab was closed (the user watches it finish) and
+// self-heals any mirror writes that were dropped. Only once caught up does
+// the interactive store (ActiveChatPane) mount.
 // ---------------------------------------------------------------------------
 
+function ResumingIndicator() {
+  return (
+    <div className="flex-1 flex items-center justify-center gap-2 text-t500 text-sm">
+      <span className="inline-flex gap-0.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-t500 animate-bounce [animation-delay:0ms]" />
+        <span className="w-1.5 h-1.5 rounded-full bg-t500 animate-bounce [animation-delay:150ms]" />
+        <span className="w-1.5 h-1.5 rounded-full bg-t500 animate-bounce [animation-delay:300ms]" />
+      </span>
+      Resuming conversation…
+    </div>
+  );
+}
+
+// Threads whose live catch-up already timed out once in this page session —
+// their underlying Eve run is presumed unreachable (e.g. orphaned by a dev
+// hot-reload), so further opens skip straight to the mirrored history
+// instead of re-eating the idle timeout on every click. Resets on full reload.
+const catchUpAbandoned = new Set<string>();
+
 function AgentChatPane({
-  token,
   thread,
   onSessionChange,
   onFirstUserMessage,
 }: {
-  token: string;
-  thread: StoredThread;
+  thread: ChatThread;
+  onSessionChange: (session: SessionState) => void;
+  onFirstUserMessage: (title: string) => void;
+}) {
+  const [caughtUp, setCaughtUp] = useState<{
+    events: HandleMessageStreamEvent[];
+    session: SessionState | undefined;
+  } | null>(thread.eve_session_id ? null : { events: [], session: undefined });
+
+  useEffect(() => {
+    const startSession = threadSessionState(thread);
+    if (!startSession) return;
+    let cancelled = false;
+
+    (async () => {
+      const events = await fetchThreadEvents(thread.id);
+
+      // If the mirror already covers the checkpoint and ends at a terminal
+      // event, the last turn finished before this mount — there is nothing to
+      // catch up, and reconnecting the stream at the checkpoint would just
+      // hang open waiting for a future turn (the terminal event is *before*
+      // the cursor, so the loop would never break and always hit the idle
+      // timeout). Skip straight to the interactive pane.
+      const upToDate =
+        events.length >= startSession.streamIndex &&
+        events.length > 0 &&
+        isTerminalEvent(events[events.length - 1]);
+
+      if (upToDate || catchUpAbandoned.has(thread.id)) {
+        if (!cancelled) setCaughtUp({ events, session: startSession });
+        return;
+      }
+
+      // Resume from the end of the mirror, not the checkpoint — if any mirror
+      // writes were dropped, this replays and re-mirrors the gap.
+      let seq = events.length;
+      let finalSession: SessionState = startSession;
+
+      // The reconnect stream can hang indefinitely if the underlying
+      // connection dies without the browser ever seeing an error or a close
+      // (observed with the local dev proxy on a stale/torn-down session) —
+      // an idle timeout, reset on every received event, guarantees this
+      // catch-up phase always finishes instead of stalling "Resuming…" forever.
+      const controller = new AbortController();
+      let idleTimer: ReturnType<typeof setTimeout> | undefined;
+      const resetIdleTimer = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => controller.abort(new Error("Chat resume idle timeout")), 6000);
+      };
+
+      try {
+        resetIdleTimer();
+        const clientSession = createEveClient().session(startSession);
+        for await (const event of clientSession.stream({
+          startIndex: seq,
+          signal: controller.signal,
+        })) {
+          if (cancelled) return;
+          resetIdleTimer();
+          events.push(event);
+          void appendEvent(thread.id, seq, event);
+          seq += 1;
+          if (isTerminalEvent(event)) break;
+        }
+        finalSession = clientSession.state;
+      } catch (err) {
+        // An idle-timeout abort is an expected degradation (the reconnect
+        // stream can hang without ever erroring or closing, e.g. against a
+        // stale local dev session) — fall back to the mirrored history so
+        // far rather than surfacing it as an app error, and stop retrying
+        // this thread's live reconnect for the rest of the page session.
+        if (controller.signal.aborted) {
+          console.warn("Chat resume timed out; showing mirrored history so far.", err);
+          catchUpAbandoned.add(thread.id);
+        } else {
+          console.error("Failed to resume chat thread", err);
+        }
+        finalSession = { ...startSession, streamIndex: Math.max(seq, startSession.streamIndex) };
+      } finally {
+        clearTimeout(idleTimer);
+      }
+
+      if (cancelled) return;
+      await checkpointThread(thread.id, finalSession);
+      if (!cancelled) setCaughtUp({ events, session: finalSession });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [thread.id]);
+
+  if (!caughtUp) {
+    return (
+      <div className="flex-1 flex flex-col min-w-0">
+        <ResumingIndicator />
+      </div>
+    );
+  }
+
+  return (
+    <ActiveChatPane
+      thread={thread}
+      initialEvents={caughtUp.events}
+      initialSession={caughtUp.session}
+      onSessionChange={onSessionChange}
+      onFirstUserMessage={onFirstUserMessage}
+    />
+  );
+}
+
+function ActiveChatPane({
+  thread,
+  initialEvents,
+  initialSession,
+  onSessionChange,
+  onFirstUserMessage,
+}: {
+  thread: ChatThread;
+  initialEvents: HandleMessageStreamEvent[];
+  initialSession: SessionState | undefined;
   onSessionChange: (session: SessionState) => void;
   onFirstUserMessage: (title: string) => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
-  const firstMsgRef = useRef(thread.eveSession !== null);
+  const firstMsgRef = useRef(thread.eve_session_id !== null);
+  const nextSeqRef = useRef(initialSession?.streamIndex ?? 0);
 
   const agent = useEveAgent({
     auth: {
@@ -257,7 +381,13 @@ function AgentChatPane({
         return data.session?.access_token ?? "";
       },
     },
-    initialSession: thread.eveSession ?? undefined,
+    initialEvents,
+    initialSession,
+    onEvent: (event) => {
+      const seq = nextSeqRef.current;
+      nextSeqRef.current += 1;
+      void appendEvent(thread.id, seq, event);
+    },
     onSessionChange,
   });
 
@@ -382,60 +512,64 @@ function AgentChatPane({
 export default function ChatPage() {
   const router = useRouter();
   const [token, setToken] = useState<string | null>(null);
-  const [threads, setThreads] = useState<StoredThread[]>([]);
+  const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 
   // Auth
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) { clearStoredThreads(); router.replace("/"); return; }
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session) { router.replace("/"); return; }
       setToken(data.session.access_token);
-      setThreads(loadThreads());
+      try {
+        setThreads(await listThreads());
+      } catch (err) {
+        console.error("Failed to load chat threads", err);
+      }
     });
   }, [router]);
 
   const activeThread = threads.find(t => t.id === activeThreadId) ?? null;
 
-  function newThread() {
-    const id = crypto.randomUUID();
-    const thread: StoredThread = {
-      id,
-      title: "New conversation",
-      eveSession: null,
-      created_at: new Date().toISOString(),
-    };
-    const updated = [thread, ...threads];
-    setThreads(updated);
-    saveThreads(updated);
-    setActiveThreadId(id);
+  async function newThread() {
+    try {
+      const thread = await createThread();
+      setThreads(prev => [thread, ...prev]);
+      setActiveThreadId(thread.id);
+    } catch (err) {
+      console.error("Failed to create chat thread", err);
+    }
   }
 
   function handleSessionChange(session: SessionState) {
-    setThreads(prev => {
-      const updated = prev.map(t =>
-        t.id === activeThreadId ? { ...t, eveSession: session } : t
-      );
-      saveThreads(updated);
-      return updated;
-    });
+    if (!activeThreadId) return;
+    void checkpointThread(activeThreadId, session);
+    setThreads(prev => prev.map(t =>
+      t.id === activeThreadId
+        ? {
+            ...t,
+            eve_session_id: session.sessionId ?? null,
+            eve_continuation_token: session.continuationToken ?? null,
+            eve_stream_index: session.streamIndex,
+          }
+        : t
+    ));
   }
 
   function handleFirstUserMessage(title: string) {
-    setThreads(prev => {
-      const updated = prev.map(t =>
-        t.id === activeThreadId ? { ...t, title } : t
-      );
-      saveThreads(updated);
-      return updated;
-    });
+    if (!activeThreadId) return;
+    void renameThread(activeThreadId, title);
+    setThreads(prev => prev.map(t => t.id === activeThreadId ? { ...t, title } : t));
   }
 
   async function handleDeleteThread(e: MouseEvent<HTMLButtonElement>, threadId: string) {
     e.stopPropagation();
-    const updated = threads.filter(t => t.id !== threadId);
-    setThreads(updated);
-    saveThreads(updated);
+    setThreads(prev => prev.filter(t => t.id !== threadId));
     if (activeThreadId === threadId) setActiveThreadId(null);
+    try {
+      await deleteThread(threadId);
+    } catch (err) {
+      console.error("Failed to delete chat thread", err);
+    }
   }
 
   if (!token) {
@@ -513,7 +647,6 @@ export default function ChatPage() {
       {activeThread ? (
         <AgentChatPane
           key={activeThread.id}
-          token={token}
           thread={activeThread}
           onSessionChange={handleSessionChange}
           onFirstUserMessage={handleFirstUserMessage}
