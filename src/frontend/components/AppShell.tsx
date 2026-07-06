@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { Menu, LogOut, ChevronDown, Sun } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getMe, getPlants, UserProfile, Plant } from "@/lib/api";
-import { useTheme } from "@/lib/theme";
 import PlantSidebar from "@/components/PlantSidebar";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 type ShellProps = {
   token: string;
@@ -28,7 +29,6 @@ export default function AppShell({ children }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showSignOut, setShowSignOut] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { theme, toggle } = useTheme();
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: sessionData }) => {
@@ -122,14 +122,15 @@ export default function AppShell({ children }: Props) {
         {/* Logo header */}
         <div className="px-4 py-4 border-b border-th flex items-center gap-3 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-            </svg>
+            <Sun className="h-4 w-4 text-amber-500" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-bold text-t50 leading-none tracking-tight">Solar Operations</p>
-            <p className="text-[11px] text-t500 mt-0.5 leading-none">Intelligence Platform</p>
+            <h1 className="text-lg font-bold text-t50 leading-tight tracking-tight">
+              Solar Operations
+            </h1>
+            <p className="text-sm text-t500 leading-tight">
+              Intelligence Platform
+            </p>
           </div>
         </div>
 
@@ -140,35 +141,9 @@ export default function AppShell({ children }: Props) {
         />
 
         {/* Theme toggle */}
-        <div className="px-2 py-2 border-t border-th">
-          <button
-            onClick={toggle}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-t400 hover:bg-surface-50 hover:text-t200 transition-colors text-sm"
-          >
-            {theme === "dark" ? (
-              <>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="5"/>
-                  <line x1="12" y1="1" x2="12" y2="3"/>
-                  <line x1="12" y1="21" x2="12" y2="23"/>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                  <line x1="1" y1="12" x2="3" y2="12"/>
-                  <line x1="21" y1="12" x2="23" y2="12"/>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                </svg>
-                Light mode
-              </>
-            ) : (
-              <>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-                Dark mode
-              </>
-            )}
-          </button>
+        <div className="px-4 py-3 border-t border-th flex items-center justify-between">
+          <span className="text-sm text-t400">Dark mode</span>
+          <ThemeToggle />
         </div>
 
         {/* User section */}
@@ -178,11 +153,7 @@ export default function AppShell({ children }: Props) {
               onClick={handleSignOut}
               className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-400 hover:bg-surface-60 hover:text-red-300 transition-colors border-b border-th"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
+              <LogOut className="h-[15px] w-[15px]" aria-hidden="true" />
               Sign out
             </button>
           )}
@@ -198,14 +169,10 @@ export default function AppShell({ children }: Props) {
               <p className="text-sm text-t200 truncate font-medium">{profile?.email}</p>
               <p className="text-xs text-t500 capitalize mt-0.5">{profile?.role}</p>
             </div>
-            <svg
-              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-              className={`text-t600 shrink-0 transition-transform duration-200 ${showSignOut ? "rotate-180" : ""}`}
+            <ChevronDown
+              className={`h-3.5 w-3.5 shrink-0 text-t600 transition-transform duration-200 ${showSignOut ? "rotate-180" : ""}`}
               aria-hidden="true"
-            >
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
+            />
           </button>
         </div>
       </aside>
@@ -216,20 +183,13 @@ export default function AppShell({ children }: Props) {
         <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-th shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg text-t400 hover:text-t200 hover:bg-surface transition-colors"
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-t400 hover:text-t200 hover:bg-surface active:scale-90 transition-all duration-150"
             aria-label="Open navigation"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="3" y1="6" x2="21" y2="6"/>
-              <line x1="3" y1="12" x2="21" y2="12"/>
-              <line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
+            <Menu className="h-[18px] w-[18px]" aria-hidden="true" />
           </button>
           <div className="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-            </svg>
+            <Sun className="h-4 w-4 text-amber-500" aria-hidden="true" />
             <span className="text-sm font-semibold text-t50">Solar Operations</span>
           </div>
         </div>

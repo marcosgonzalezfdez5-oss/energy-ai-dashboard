@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
+import { ArrowLeft, Menu, Plus, Trash2 } from "lucide-react";
 import { useEveAgent } from "eve/react";
 import type { EveDynamicToolPart, EveMessage, HandleMessageStreamEvent, SessionState } from "eve/client";
 import { supabase } from "@/lib/supabase";
 import { createEveClient } from "@/lib/eve-client";
+import IconButton from "@/components/ui/IconButton";
 import {
   type ChatThread,
   appendEvent,
@@ -514,6 +516,7 @@ export default function ChatPage() {
   const [token, setToken] = useState<string | null>(null);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Auth
   useEffect(() => {
@@ -535,9 +538,15 @@ export default function ChatPage() {
       const thread = await createThread();
       setThreads(prev => [thread, ...prev]);
       setActiveThreadId(thread.id);
+      setSidebarOpen(false);
     } catch (err) {
       console.error("Failed to create chat thread", err);
     }
+  }
+
+  function selectThread(id: string) {
+    setActiveThreadId(id);
+    setSidebarOpen(false);
   }
 
   function handleSessionChange(session: SessionState) {
@@ -582,30 +591,38 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen bg-page">
-      {/* Thread sidebar */}
-      <aside className="w-72 shrink-0 border-r border-th flex flex-col bg-page">
-        <div className="px-4 py-4 border-b border-th flex items-center justify-between">
-          <span className="text-[13px] font-semibold text-t300 tracking-wide">Conversations</span>
-          <button
-            onClick={newThread}
-            title="New conversation"
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-t400 hover:text-amber-500 hover:bg-surface transition-colors"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-          </button>
-        </div>
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="flex items-center gap-2 px-4 py-2.5 text-xs text-t400 hover:text-t50 hover:bg-surface transition-colors border-b border-th"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-          Dashboard
-        </button>
+      {/* Thread sidebar */}
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-40 w-72 shrink-0 border-r border-th flex flex-col bg-page
+          transition-transform duration-300 ease-in-out
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          lg:relative lg:translate-x-0
+        `}
+      >
+        <div className="px-3 py-4 border-b border-th flex items-center gap-1.5">
+          <IconButton
+            icon={<ArrowLeft className="h-[18px] w-[18px]" aria-hidden="true" />}
+            label="Back to Dashboard"
+            tooltipSide="right"
+            onClick={() => router.push("/dashboard")}
+          />
+          <span className="flex-1 text-[13px] font-semibold text-t300 tracking-wide">Conversations</span>
+          <IconButton
+            icon={<Plus className="h-[15px] w-[15px]" aria-hidden="true" />}
+            label="New conversation"
+            variant="accent"
+            onClick={newThread}
+          />
+        </div>
 
         <div className="flex-1 overflow-y-auto py-2">
           {threads.length === 0 && (
@@ -619,52 +636,64 @@ export default function ChatPage() {
               }`}
             >
               <button
-                onClick={() => setActiveThreadId(t.id)}
+                onClick={() => selectThread(t.id)}
                 className={`flex-1 text-left text-[13px] truncate px-2 py-1 rounded-lg leading-snug ${
                   t.id === activeThreadId ? "text-t50 font-medium" : "text-t400 group-hover:text-t300"
                 }`}
               >
                 {t.title || "Untitled conversation"}
               </button>
-              <button
+              <IconButton
+                icon={<Trash2 className="h-3 w-3" aria-hidden="true" />}
+                label="Delete conversation"
+                variant="danger"
+                size="sm"
                 onClick={(e) => handleDeleteThread(e, t.id)}
-                title="Delete conversation"
-                className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-t600 hover:text-red-400 hover:bg-surface-deep opacity-0 group-hover:opacity-100 transition-all"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="3 6 5 6 21 6"/>
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                  <path d="M10 11v6M14 11v6"/>
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                </svg>
-              </button>
+                className="opacity-0 group-hover:opacity-100"
+              />
             </div>
           ))}
         </div>
       </aside>
 
       {/* Chat area */}
-      {activeThread ? (
-        <AgentChatPane
-          key={activeThread.id}
-          thread={activeThread}
-          onSessionChange={handleSessionChange}
-          onFirstUserMessage={handleFirstUserMessage}
-        />
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-t500">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-t600" aria-hidden="true">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          <p className="text-sm">Select a conversation or start a new one.</p>
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile header bar */}
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-th shrink-0">
           <button
-            onClick={newThread}
-            className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-sm font-semibold transition-colors"
+            onClick={() => setSidebarOpen(true)}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-t400 hover:text-t200 hover:bg-surface active:scale-90 transition-all duration-150"
+            aria-label="Open conversations"
           >
-            New conversation
+            <Menu className="h-[18px] w-[18px]" aria-hidden="true" />
           </button>
+          <span className="text-sm font-semibold text-t50 truncate">
+            {activeThread?.title || "Conversations"}
+          </span>
         </div>
-      )}
+
+        {activeThread ? (
+          <AgentChatPane
+            key={activeThread.id}
+            thread={activeThread}
+            onSessionChange={handleSessionChange}
+            onFirstUserMessage={handleFirstUserMessage}
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-t500">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-t600" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <p className="text-sm">Select a conversation or start a new one.</p>
+            <button
+              onClick={newThread}
+              className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-sm font-semibold transition-colors active:scale-95"
+            >
+              New conversation
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
