@@ -2,6 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getProfileFromUserId } from "../../lib/auth-server";
 import { getUserScopedSupabase } from "../../lib/supabase-server";
+import { elementIdsForPlant } from "../../lib/datasource-lookup";
 
 export default defineTool({
   description: "List the sensors and meters (datasources) for a given plant.",
@@ -15,14 +16,17 @@ export default defineTool({
     const profile = await getProfileFromUserId(userId);
     const supabase = getUserScopedSupabase(userId);
 
+    const elementIds = await elementIdsForPlant(supabase, profile.company_id, plant_id);
+    if (elementIds.length === 0) return [];
+
     const { data, error } = await supabase
       .from("datasources")
-      .select("id, name, units, default_aggregation, elements!inner(plant_id)")
+      .select("id, name, units, default_aggregation")
       .eq("company_id", profile.company_id)
-      .eq("elements.plant_id", plant_id)
+      .in("element_id", elementIds)
       .order("name");
 
     if (error) throw error;
-    return (data ?? []).map(({ elements: _el, ...ds }) => ds);
+    return data ?? [];
   },
 });

@@ -10,6 +10,7 @@ import { useEveAgent } from "eve/react";
 import type { EveDynamicToolPart, EveMessage, HandleMessageStreamEvent, SessionState } from "eve/client";
 import { supabase } from "@/lib/supabase";
 import { createEveClient } from "@/lib/eve-client";
+import { softDeleteWidget, restoreWidget } from "@/lib/widgets";
 import IconButton from "@/components/ui/IconButton";
 import {
   type ChatThread,
@@ -128,6 +129,75 @@ function ToolCard({ part, expanded, onToggle }: {
 }
 
 // ---------------------------------------------------------------------------
+// Widget tool confirmation card — create_widget/update_widget/delete_widget
+// get a rich confirmation with an inline Undo instead of the generic JSON
+// ToolCard, since chat and the dashboard are separate routes: the undo
+// affordance for "just created/deleted a widget" has to live where the
+// action happened, in chat, calling lib/widgets.ts directly (no agent
+// round-trip needed for a plain soft-delete/restore).
+// ---------------------------------------------------------------------------
+
+const WIDGET_TOOL_NAMES = new Set(["create_widget", "update_widget", "delete_widget"]);
+
+type WidgetToolOutput = { id?: string; title?: string; already_removed?: boolean };
+
+function WidgetToolCard({ part }: { part: EveDynamicToolPart }) {
+  const [busy, setBusy] = useState(false);
+  const [undone, setUndone] = useState(false);
+  const output = part.output as WidgetToolOutput | null;
+
+  if (!output?.id) return null;
+  const title = output.title ?? "widget";
+
+  async function handleUndo(action: (id: string) => Promise<void>) {
+    if (!output?.id) return;
+    setBusy(true);
+    try {
+      await action(output.id);
+      setUndone(true);
+    } catch (e) {
+      console.error("Failed to undo widget action", e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  let message: string;
+  let onUndo: (() => void) | null = null;
+
+  if (part.toolName === "create_widget") {
+    message = undone ? `Removed "${title}".` : `Created "${title}" — visible on your dashboard.`;
+    if (!undone) onUndo = () => handleUndo(softDeleteWidget);
+  } else if (part.toolName === "delete_widget") {
+    message = output.already_removed
+      ? `"${title}" was already removed.`
+      : undone
+        ? `Restored "${title}".`
+        : `Removed "${title}".`;
+    if (!output.already_removed && !undone) onUndo = () => handleUndo(restoreWidget);
+  } else {
+    message = `Updated "${title}".`;
+  }
+
+  return (
+    <div className="flex items-center gap-3 border border-th rounded-lg px-3 py-2 my-1 text-xs bg-surface">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" aria-hidden="true" />
+      <span className="flex-1 text-t300">{message}</span>
+      {onUndo && (
+        <button
+          type="button"
+          onClick={onUndo}
+          disabled={busy}
+          className="text-amber-500 hover:text-amber-400 font-medium disabled:opacity-50 transition-colors"
+        >
+          Undo
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Message bubble
 // ---------------------------------------------------------------------------
 
@@ -195,6 +265,9 @@ function MessageBubble({ msg }: { msg: EveMessage }) {
             return <AssistantMarkdown key={i} content={part.text} />;
           }
           if (part.type === "dynamic-tool") {
+            if (part.state === "output-available" && WIDGET_TOOL_NAMES.has(part.toolName)) {
+              return <WidgetToolCard key={part.toolCallId} part={part} />;
+            }
             return (
               <ToolCard
                 key={part.toolCallId}
