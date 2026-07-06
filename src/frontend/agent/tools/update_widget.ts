@@ -1,6 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { getProfileFromUserId } from "../../lib/auth-server";
+import { getProfileFromUserId, requireAdmin } from "../../lib/auth-server";
 import { getUserScopedSupabase } from "../../lib/supabase-server";
 import {
   ComparisonMetricSchema,
@@ -14,6 +14,7 @@ import {
 import { resolveRelativeRange } from "../../lib/relative-range";
 import { assertWidgetHasData } from "../../lib/widget-data-check";
 import { elementIdsForPlant } from "../../lib/datasource-lookup";
+import { resolveZone } from "../../lib/market-zones";
 
 // Flat fields (no nested discriminated unions) inside `changes` — same
 // reasoning as create_widget.ts: OpenAI's function schema converter needs a
@@ -43,6 +44,10 @@ export default defineTool({
         datasource_id: z.string().nullable().optional().describe("Set to null to switch to plant-level total energy."),
         aggregation: z.enum(["sum", "average"]).optional(),
         granularity: z.enum(["hourly", "daily"]).optional(),
+        revenue: z.boolean().optional().describe(
+          "For 'kpi'/'line_chart': set true to switch to revenue (EUR), false to switch back to a raw reading. Admin only."
+        ),
+        zone: z.string().optional().describe("Market zone for revenue widgets — omit to keep/auto-resolve the current one."),
         metric: ComparisonMetricSchema.optional(),
         plant_ids: z.array(z.string()).nullable().optional().describe("Set to null to compare all plants."),
       })
@@ -118,35 +123,55 @@ export default defineTool({
       if (!plantId) throw new Error("plant_id is required to build this widget.");
       await requirePlant(plantId);
 
-      const datasourceId =
-        changes.datasource_id === null
-          ? undefined
-          : changes.datasource_id ?? (existingSource?.kind === "datasource" ? existingSource.datasource_id : undefined);
-
       const granularity =
         resultType === "line_chart"
           ? changes.granularity ?? (existing?.type === "line_chart" ? existing.granularity : "daily")
           : undefined;
 
-      if (resultType === "line_chart" && granularity === "hourly" && !datasourceId) {
-        throw new Error("datasource_id is required when granularity is 'hourly'.");
+      const wantsRevenue = changes.revenue ?? existingSource?.kind === "plant_revenue";
+
+      let source: MetricSource;
+      let units: string;
+      let aggregation: "sum" | "average";
+
+      if (wantsRevenue) {
+        requireAdmin(profile);
+        if (changes.datasource_id) {
+          throw new Error("datasource_id cannot be combined with revenue — revenue is computed from total plant energy, not a single datasource.");
+        }
+        if (granularity === "hourly") {
+          throw new Error("Revenue widgets only support daily granularity.");
+        }
+        const requestedZone = changes.zone ?? (existingSource?.kind === "plant_revenue" ? existingSource.zone : undefined);
+        const zone = await resolveZone(supabase, profile.company_id, requestedZone);
+        source = { kind: "plant_revenue", plant_id: plantId, zone };
+        units = "€";
+        aggregation = "sum";
+      } else {
+        const datasourceId =
+          changes.datasource_id === null
+            ? undefined
+            : changes.datasource_id ?? (existingSource?.kind === "datasource" ? existingSource.datasource_id : undefined);
+
+        if (resultType === "line_chart" && granularity === "hourly" && !datasourceId) {
+          throw new Error("datasource_id is required when granularity is 'hourly'.");
+        }
+
+        const existingAggregation =
+          existing?.type === "kpi" || existing?.type === "line_chart" ? existing.aggregation : undefined;
+
+        units = "kWh";
+        aggregation = changes.aggregation ?? existingAggregation ?? "sum";
+
+        if (datasourceId) {
+          const ds = await requireDatasource(plantId, datasourceId);
+          units = ds.units ?? "";
+          aggregation = changes.aggregation ?? (ds.default_aggregation as "sum" | "average" | null) ?? aggregation;
+          source = { kind: "datasource", plant_id: plantId, datasource_id: datasourceId };
+        } else {
+          source = { kind: "plant_energy", plant_id: plantId };
+        }
       }
-
-      const existingAggregation =
-        existing?.type === "kpi" || existing?.type === "line_chart" ? existing.aggregation : undefined;
-
-      let units = "kWh";
-      let aggregation: "sum" | "average" = changes.aggregation ?? existingAggregation ?? "sum";
-
-      if (datasourceId) {
-        const ds = await requireDatasource(plantId, datasourceId);
-        units = ds.units ?? "";
-        aggregation = changes.aggregation ?? (ds.default_aggregation as "sum" | "average" | null) ?? aggregation;
-      }
-
-      const source: MetricSource = datasourceId
-        ? { kind: "datasource", plant_id: plantId, datasource_id: datasourceId }
-        : { kind: "plant_energy", plant_id: plantId };
 
       config =
         resultType === "kpi"

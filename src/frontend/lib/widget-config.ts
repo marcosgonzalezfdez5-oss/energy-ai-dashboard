@@ -72,6 +72,11 @@ export function toRelativeRange(input: FlatRangeInput): RelativeRange {
 export const MetricSourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("plant_energy"), plant_id: z.string() }),
   z.object({ kind: z.literal("datasource"), plant_id: z.string(), datasource_id: z.string() }),
+  // Revenue = daily plant energy (kWh) x daily avg market price (EUR/MWh) for
+  // `zone`, joined by date. Admin-only (financial data, same gate as
+  // get_market_prices/get_monthly_costs). Always daily granularity/"sum"
+  // aggregation — there's no meaningful hourly or averaged revenue here.
+  z.object({ kind: z.literal("plant_revenue"), plant_id: z.string(), zone: z.string() }),
 ]);
 export type MetricSource = z.infer<typeof MetricSourceSchema>;
 

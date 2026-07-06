@@ -1,6 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { getProfileFromUserId } from "../../lib/auth-server";
+import { getProfileFromUserId, requireAdmin } from "../../lib/auth-server";
 import { getUserScopedSupabase } from "../../lib/supabase-server";
 import {
   ComparisonMetricSchema,
@@ -13,6 +13,7 @@ import {
 import { resolveRelativeRange } from "../../lib/relative-range";
 import { assertWidgetHasData } from "../../lib/widget-data-check";
 import { elementIdsForPlant } from "../../lib/datasource-lookup";
+import { resolveZone } from "../../lib/market-zones";
 
 // Flat input schema (no nested discriminated unions) — OpenAI's function
 // schema converter requires the tool's root schema to be a plain `type:
@@ -39,6 +40,14 @@ export default defineTool({
       "For 'kpi'/'line_chart'. Omit to use the datasource's own default aggregation."
     ),
     granularity: z.enum(["hourly", "daily"]).optional().describe("For 'line_chart' only. Defaults to 'daily'."),
+    revenue: z.boolean().optional().describe(
+      "For 'kpi'/'line_chart': set true to show revenue (EUR) = daily plant energy x daily market price, instead " +
+        "of a raw reading. Requires plant_id; do not also pass datasource_id. Admin access only. Always daily " +
+        "granularity (hourly revenue isn't supported)."
+    ),
+    zone: z.string().optional().describe(
+      "Market zone for revenue widgets — omit to auto-use the company's only zone; required if multiple zones exist."
+    ),
 
     // comparison_chart
     metric: ComparisonMetricSchema.optional().describe("Required for widget_type 'comparison_chart'."),
@@ -92,22 +101,40 @@ export default defineTool({
       await requirePlant(input.plant_id);
 
       const granularity = input.widget_type === "line_chart" ? input.granularity ?? "daily" : undefined;
-      if (input.widget_type === "line_chart" && granularity === "hourly" && !input.datasource_id) {
-        throw new Error("datasource_id is required when granularity is 'hourly'.");
+
+      let source: MetricSource;
+      let units: string;
+      let aggregation: "sum" | "average";
+
+      if (input.revenue) {
+        requireAdmin(profile);
+        if (input.datasource_id) {
+          throw new Error("datasource_id cannot be combined with revenue — revenue is computed from total plant energy, not a single datasource.");
+        }
+        if (granularity === "hourly") {
+          throw new Error("Revenue widgets only support daily granularity.");
+        }
+        const zone = await resolveZone(supabase, profile.company_id, input.zone);
+        source = { kind: "plant_revenue", plant_id: input.plant_id, zone };
+        units = "€";
+        aggregation = "sum";
+      } else {
+        if (granularity === "hourly" && !input.datasource_id) {
+          throw new Error("datasource_id is required when granularity is 'hourly'.");
+        }
+
+        units = "kWh";
+        aggregation = input.aggregation ?? "sum";
+
+        if (input.datasource_id) {
+          const ds = await requireDatasource(input.plant_id, input.datasource_id);
+          units = ds.units ?? "";
+          aggregation = input.aggregation ?? (ds.default_aggregation as "sum" | "average" | null) ?? "sum";
+          source = { kind: "datasource", plant_id: input.plant_id, datasource_id: input.datasource_id };
+        } else {
+          source = { kind: "plant_energy", plant_id: input.plant_id };
+        }
       }
-
-      let units = "kWh";
-      let aggregation: "sum" | "average" = input.aggregation ?? "sum";
-
-      if (input.datasource_id) {
-        const ds = await requireDatasource(input.plant_id, input.datasource_id);
-        units = ds.units ?? "";
-        aggregation = input.aggregation ?? (ds.default_aggregation as "sum" | "average" | null) ?? "sum";
-      }
-
-      const source: MetricSource = input.datasource_id
-        ? { kind: "datasource", plant_id: input.plant_id, datasource_id: input.datasource_id }
-        : { kind: "plant_energy", plant_id: input.plant_id };
 
       config =
         input.widget_type === "kpi"

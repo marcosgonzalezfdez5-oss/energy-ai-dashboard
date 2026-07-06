@@ -39,6 +39,13 @@ selected in the sidebar.
 | `line_chart` | Time series for one plant/datasource | existing `ReadingChart` |
 | `comparison_chart` | Multi-plant/series comparison | existing `ComparisonChart` |
 
+`kpi`/`line_chart` also support a **revenue** source (`source.kind: "plant_revenue"`) — EUR =
+daily plant energy x daily market price for a zone, joined by date. Admin access only, same as
+`get_market_prices`/`get_monthly_costs`/`FinancialPanel`; always daily granularity; not available
+on `comparison_chart` yet. Market prices aren't linked to a plant anywhere in the schema (only a
+company-wide `zone`, unrelated to `plants.region`), so the zone is auto-resolved when a company
+has only one (true today) and must be specified explicitly otherwise — see `lib/market-zones.ts`.
+
 Bar charts, pie charts, tables, heatmaps, forecasts, alerts, and markdown widgets are not
 supported — the assistant is instructed to say so plainly rather than substitute a different type.
 

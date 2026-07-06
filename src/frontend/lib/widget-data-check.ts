@@ -65,6 +65,31 @@ export async function widgetHasData(
     if (config.source.kind === "datasource") {
       return hasReadingsForDatasources(supabase, companyId, [config.source.datasource_id], range);
     }
+
+    if (config.source.kind === "plant_revenue") {
+      // Non-empty only if energy and price data actually overlap on at least
+      // one date — each individually being non-empty isn't sufficient, since
+      // fetchMetricSeries joins them by date.
+      const [{ data: energyRows, error: energyErr }, { data: priceRows, error: priceErr }] = await Promise.all([
+        supabase.rpc("daily_energy_by_plant", {
+          p_plant_id: config.source.plant_id,
+          p_company_id: companyId,
+          p_start: range.start,
+          p_end: range.end,
+        }),
+        supabase.rpc("daily_market_prices", {
+          p_company_id: companyId,
+          p_zone: config.source.zone,
+          p_start: range.start,
+          p_end: range.end,
+        }),
+      ]);
+      if (energyErr) throw energyErr;
+      if (priceErr) throw priceErr;
+      const priceDates = new Set(((priceRows ?? []) as { date: string }[]).map((r) => r.date));
+      return ((energyRows ?? []) as { date: string }[]).some((r) => priceDates.has(r.date));
+    }
+
     // Plant-level energy — same aggregation path the dashboard renders with.
     const { data, error } = await supabase.rpc("daily_energy_by_plant", {
       p_plant_id: config.source.plant_id,
