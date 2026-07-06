@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getProfileFromUserId, requireAdmin } from "../../lib/auth-server";
-import { getServiceSupabase } from "../../lib/supabase-server";
+import { getUserScopedSupabase } from "../../lib/supabase-server";
 
 export default defineTool({
   description: "Fetch monthly cost breakdown (EUR) per plant category. Admin access only.",
@@ -11,13 +11,13 @@ export default defineTool({
     plant_id: z.string().optional().describe("Restrict to one plant UUID. Omit for all plants."),
   }),
   async execute({ year, month, plant_id }, ctx) {
-    const userId = ctx.session.auth.current?.principalId;
+    const userId = ctx.session.auth.current?.subject;
     if (!userId) throw new Error("Unauthenticated");
 
     const profile = await getProfileFromUserId(userId);
     requireAdmin(profile);
 
-    const supabase = getServiceSupabase();
+    const supabase = getUserScopedSupabase(userId);
 
     let query = supabase
       .from("monthly_costs")

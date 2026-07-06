@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { extractBearer, getProfileFromJwt, requireAdmin, type Profile } from "./auth-server";
+import { getUserSupabase } from "./supabase-server";
 
 type RouteHandler<TParams extends Record<string, string> = Record<string, never>> = (
   req: Request,
   profile: Profile,
-  params: TParams
+  params: TParams,
+  supabase: SupabaseClient
 ) => Promise<Response>;
 
 type NextContext<TParams extends Record<string, string>> = {
@@ -22,7 +25,7 @@ export function withAuth<TParams extends Record<string, string> = Record<string,
 
       const profile = await getProfileFromJwt(jwt);
       const params = context ? await context.params : ({} as TParams);
-      return await handler(req, profile, params);
+      return await handler(req, profile, params, getUserSupabase(jwt));
     } catch (err: unknown) {
       const status = (err as { status?: number }).status ?? 500;
       const message = err instanceof Error ? err.message : "Internal server error";
@@ -35,8 +38,8 @@ export function withAuth<TParams extends Record<string, string> = Record<string,
 export function withAdminAuth<TParams extends Record<string, string> = Record<string, never>>(
   handler: RouteHandler<TParams>
 ) {
-  return withAuth<TParams>(async (req, profile, params) => {
+  return withAuth<TParams>(async (req, profile, params, supabase) => {
     requireAdmin(profile);
-    return handler(req, profile, params);
+    return handler(req, profile, params, supabase);
   });
 }

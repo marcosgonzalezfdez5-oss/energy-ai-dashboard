@@ -35,6 +35,14 @@ function saveThreads(threads: StoredThread[]) {
   localStorage.setItem(THREADS_KEY, JSON.stringify(threads));
 }
 
+/** Clears locally-persisted chat threads (titles, history, Eve session cursors).
+ *  Call on sign-out so the next login on this browser doesn't see the
+ *  previous user's conversations. */
+export function clearStoredThreads() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(THREADS_KEY);
+}
+
 // ---------------------------------------------------------------------------
 // Markdown renderer
 // ---------------------------------------------------------------------------
@@ -243,7 +251,12 @@ function AgentChatPane({
   const firstMsgRef = useRef(thread.eveSession !== null);
 
   const agent = useEveAgent({
-    auth: { bearer: token },
+    auth: {
+      bearer: async () => {
+        const { data } = await supabase.auth.getSession();
+        return data.session?.access_token ?? "";
+      },
+    },
     initialSession: thread.eveSession ?? undefined,
     onSessionChange,
   });
@@ -375,7 +388,7 @@ export default function ChatPage() {
   // Auth
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) { router.replace("/"); return; }
+      if (!data.session) { clearStoredThreads(); router.replace("/"); return; }
       setToken(data.session.access_token);
       setThreads(loadThreads());
     });

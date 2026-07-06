@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/api-handler";
-import { getServiceSupabase } from "@/lib/supabase-server";
 
-export const GET = withAuth(async (_req, profile) => {
-  const supabase = getServiceSupabase();
+export const GET = withAuth(async (_req, profile, _params, supabase) => {
   const { data, error } = await supabase
     .from("plants")
     .select("id, external_id, name, nominal_power, region, commissioning_date")

@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/api-handler";
-import { getServiceSupabase } from "@/lib/supabase-server";
 
-export const GET = withAdminAuth(async (_req, profile) => {
-  const supabase = getServiceSupabase();
+export const GET = withAdminAuth(async (_req, profile, _params, supabase) => {
   const { data, error } = await supabase
     .from("market_prices")
     .select("zone")

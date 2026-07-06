@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getProfileFromUserId } from "../../lib/auth-server";
-import { getServiceSupabase } from "../../lib/supabase-server";
+import { getUserScopedSupabase } from "../../lib/supabase-server";
 
 export default defineTool({
   description: "Fetch daily energy totals (kWh) for a plant or a specific datasource. Provide either plant_id or datasource_id.",
@@ -14,11 +14,11 @@ export default defineTool({
   async execute({ plant_id, datasource_id, start, end }, ctx) {
     if (!plant_id && !datasource_id) throw new Error("Provide plant_id or datasource_id.");
 
-    const userId = ctx.session.auth.current?.principalId;
+    const userId = ctx.session.auth.current?.subject;
     if (!userId) throw new Error("Unauthenticated");
 
     const profile = await getProfileFromUserId(userId);
-    const supabase = getServiceSupabase();
+    const supabase = getUserScopedSupabase(userId);
 
     if (datasource_id) {
       // Single datasource — aggregate hourly readings by calendar date.

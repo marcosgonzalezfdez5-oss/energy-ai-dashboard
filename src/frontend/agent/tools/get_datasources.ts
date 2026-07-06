@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getProfileFromUserId } from "../../lib/auth-server";
-import { getServiceSupabase } from "../../lib/supabase-server";
+import { getUserScopedSupabase } from "../../lib/supabase-server";
 
 export default defineTool({
   description: "List the sensors and meters (datasources) for a given plant.",
@@ -9,11 +9,11 @@ export default defineTool({
     plant_id: z.string().describe("The plant UUID from get_plants."),
   }),
   async execute({ plant_id }, ctx) {
-    const userId = ctx.session.auth.current?.principalId;
+    const userId = ctx.session.auth.current?.subject;
     if (!userId) throw new Error("Unauthenticated");
 
     const profile = await getProfileFromUserId(userId);
-    const supabase = getServiceSupabase();
+    const supabase = getUserScopedSupabase(userId);
 
     const { data, error } = await supabase
       .from("datasources")

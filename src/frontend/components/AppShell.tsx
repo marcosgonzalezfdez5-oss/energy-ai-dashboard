@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { getMe, getPlants, UserProfile, Plant } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
 import PlantSidebar from "@/components/PlantSidebar";
+import { clearStoredThreads } from "@/components/ChatPage";
 
 type ShellProps = {
   token: string;
@@ -61,6 +62,15 @@ export default function AppShell({ children }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Keep the token in sync with Supabase's background refresh, so a long-open
+  // tab doesn't keep sending an expired token to the API routes.
+  useEffect(() => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) setToken(session.access_token);
+    });
+    return () => subscription.subscription.unsubscribe();
+  }, []);
+
   useEffect(() => {
     if (plants.length === 0) return;
     const plantIdFromUrl = searchParams.get("plant");
@@ -70,6 +80,7 @@ export default function AppShell({ children }: Props) {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
+    clearStoredThreads();
     router.replace("/");
   }
 

@@ -1,17 +1,19 @@
 import { eveChannel } from "eve/channels/eve";
-import { jwtHmac, localDev } from "eve/channels/auth";
+import { oidc, localDev } from "eve/channels/auth";
 
 export default eveChannel({
   auth: [
-    // Open on localhost for local development (ignored in production).
-    localDev(),
-    // Verify Supabase JWTs (HS256 signed with the project JWT secret).
-    jwtHmac({
-      algorithm: "HS256",
+    // Verify Supabase-issued JWTs via its OIDC discovery document + JWKS.
+    // Supabase signs user session tokens with rotating asymmetric keys
+    // (ES256 + kid) via GoTrue, not the legacy static HS256 project secret —
+    // oidc() fetches the current signing keys dynamically instead of
+    // requiring a single static secret/public key.
+    oidc({
       audiences: ["authenticated"],
       issuer: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1`,
-      secret: process.env.SUPABASE_JWT_SECRET!,
     }),
+    // Fallback for unauthenticated local tooling (ignored in production).
+    localDev(),
   ],
   // Allow browser requests from the same origin.
   cors: { origin: "*", credentials: false },

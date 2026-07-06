@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getProfileFromUserId } from "../../lib/auth-server";
-import { getServiceSupabase } from "../../lib/supabase-server";
+import { getUserScopedSupabase } from "../../lib/supabase-server";
 
 export default defineTool({
   description: "Compare daily energy production across all plants in a date range.",
@@ -10,11 +10,11 @@ export default defineTool({
     end: z.string().describe("End date in YYYY-MM-DD format."),
   }),
   async execute({ start, end }, ctx) {
-    const userId = ctx.session.auth.current?.principalId;
+    const userId = ctx.session.auth.current?.subject;
     if (!userId) throw new Error("Unauthenticated");
 
     const profile = await getProfileFromUserId(userId);
-    const supabase = getServiceSupabase();
+    const supabase = getUserScopedSupabase(userId);
 
     const { data, error } = await supabase.rpc("compare_plants_daily_energy", {
       p_company_id: profile.company_id,

@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getProfileFromUserId } from "../../lib/auth-server";
-import { getServiceSupabase } from "../../lib/supabase-server";
+import { getUserScopedSupabase } from "../../lib/supabase-server";
 
 export default defineTool({
   description: "Fetch hourly energy readings for a datasource within a date range. Returns at most 1000 rows — use get_daily_energy for longer periods.",
@@ -11,11 +11,11 @@ export default defineTool({
     end: z.string().describe("End datetime in ISO 8601 format (e.g. 2024-01-31T23:59:59Z)."),
   }),
   async execute({ datasource_id, start, end }, ctx) {
-    const userId = ctx.session.auth.current?.principalId;
+    const userId = ctx.session.auth.current?.subject;
     if (!userId) throw new Error("Unauthenticated");
 
     const profile = await getProfileFromUserId(userId);
-    const supabase = getServiceSupabase();
+    const supabase = getUserScopedSupabase(userId);
 
     const { data, error } = await supabase
       .from("readings")

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/api-handler";
-import { getServiceSupabase } from "@/lib/supabase-server";
 
-export const GET = withAdminAuth(async (req, profile) => {
+export const GET = withAdminAuth(async (req, profile, _params, supabase) => {
   const { searchParams } = new URL(req.url);
   const zone = searchParams.get("zone");
   const start = searchParams.get("start");
@@ -11,7 +10,6 @@ export const GET = withAdminAuth(async (req, profile) => {
     return NextResponse.json({ error: "Missing zone, start, or end" }, { status: 400 });
   }
 
-  const supabase = getServiceSupabase();
   const { data, error } = await supabase.rpc("daily_market_prices", {
     p_company_id: profile.company_id,
     p_zone: zone,
